@@ -13,56 +13,56 @@ use Moosh\ApacheLogParser\Parser;
 
 /**
  * The DB table:
- * CREATE TABLE perflog (
- * id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
- * timestamp datetime NOT NULL,
- * time int(10) unsigned NOT NULL,
- * url varchar(255) NOT NULL,
- * memory_peak int(10) unsigned NOT NULL,
- * includecount int(10) unsigned NOT NULL,
- * contextswithfilters int(10) unsigned NOT NULL,
- * filterscreated int(10) unsigned NOT NULL,
- * textsfiltered int(10) unsigned NOT NULL,
- * stringsfiltered int(10) unsigned NOT NULL,
- * langcountgetstring int(10) unsigned NOT NULL,
- * db_reads int(10) unsigned NOT NULL,
- * db_writes int(10) unsigned NOT NULL,
- * db_queries_time int(10) unsigned NOT NULL,
- * ticks int(10) unsigned NOT NULL,
- * user int(10) unsigned NOT NULL,
- * sys int(10) unsigned NOT NULL,
- * cuser int(10) unsigned NOT NULL,
- * csys int(10) unsigned NOT NULL,
- * serverload int(10) unsigned NOT NULL,
- * cache_mondodb_sets int(10) unsigned NOT NULL,
- * cache_mondodb_misses int(10) unsigned NOT NULL,
- * cache_mondodb_hits int(10) unsigned NOT NULL,
- * cache_static_sets int(10) unsigned NOT NULL,
- * cache_static_misses int(10) unsigned NOT NULL,
- * cache_static_hits int(10) unsigned NOT NULL,
- * cache_staticpersist_sets int(10) unsigned NOT NULL,
- * cache_staticpersist_misses int(10) unsigned NOT NULL,
- * cache_staticpersist_hits int(10) unsigned NOT NULL,
- * cache_file_sets int(10) unsigned NOT NULL,
- * cache_file_misses int(10) unsigned NOT NULL,
- * cache_file_hits int(10) unsigned NOT NULL,
- * cache_memcache_sets int(10) unsigned NOT NULL,
- * cache_memcache_misses int(10) unsigned NOT NULL,
- * cache_memcache_hits int(10) unsigned NOT NULL,
- * cache_memcached_sets int(10) unsigned NOT NULL,
- * cache_memcached_misses int(10) unsigned NOT NULL,
- * cache_memcached_hits int(10) unsigned NOT NULL,
- * cache_redis_sets int(10) unsigned NOT NULL,
- * cache_redis_misses int(10) unsigned NOT NULL,
- * cache_redis_hits int(10) unsigned NOT NULL,
- * query varchar(255) NULL,
- * script varchar(255) NULL,
- * path varchar(255) NULL,
- * type varchar(255) NULL,
- * host varchar(255) NULL,
- * PRIMARY KEY (id),
- * UNIQUE KEY uniquerow (timestamp,time,url)
- * );
+CREATE TABLE perflog (
+id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+timestamp datetime NOT NULL,
+time int(10) unsigned NOT NULL,
+url varchar(255) NOT NULL,
+memory_peak int(10) unsigned NOT NULL,
+includecount int(10) unsigned NOT NULL,
+contextswithfilters int(10) unsigned NOT NULL,
+filterscreated int(10) unsigned NOT NULL,
+textsfiltered int(10) unsigned NOT NULL,
+stringsfiltered int(10) unsigned NOT NULL,
+langcountgetstring int(10) unsigned NOT NULL,
+db_reads int(10) unsigned NOT NULL,
+db_writes int(10) unsigned NOT NULL,
+db_queries_time int(10) unsigned NOT NULL,
+ticks int(10) unsigned NOT NULL,
+user int(10) unsigned NOT NULL,
+sys int(10) unsigned NOT NULL,
+cuser int(10) unsigned NOT NULL,
+csys int(10) unsigned NOT NULL,
+serverload int(10) unsigned NOT NULL,
+cache_mondodb_sets int(10) unsigned NOT NULL,
+cache_mondodb_misses int(10) unsigned NOT NULL,
+cache_mondodb_hits int(10) unsigned NOT NULL,
+cache_static_sets int(10) unsigned NOT NULL,
+cache_static_misses int(10) unsigned NOT NULL,
+cache_static_hits int(10) unsigned NOT NULL,
+cache_staticpersist_sets int(10) unsigned NOT NULL,
+cache_staticpersist_misses int(10) unsigned NOT NULL,
+cache_staticpersist_hits int(10) unsigned NOT NULL,
+cache_file_sets int(10) unsigned NOT NULL,
+cache_file_misses int(10) unsigned NOT NULL,
+cache_file_hits int(10) unsigned NOT NULL,
+cache_memcache_sets int(10) unsigned NOT NULL,
+cache_memcache_misses int(10) unsigned NOT NULL,
+cache_memcache_hits int(10) unsigned NOT NULL,
+cache_memcached_sets int(10) unsigned NOT NULL,
+cache_memcached_misses int(10) unsigned NOT NULL,
+cache_memcached_hits int(10) unsigned NOT NULL,
+cache_redis_sets int(10) unsigned NOT NULL,
+cache_redis_misses int(10) unsigned NOT NULL,
+cache_redis_hits int(10) unsigned NOT NULL,
+query varchar(255) NULL,
+script varchar(255) NULL,
+path varchar(255) NULL,
+type varchar(255) NULL,
+host varchar(255) NULL,
+PRIMARY KEY (id),
+UNIQUE KEY uniquerow (timestamp,time,url)
+);
  * Class ParseApacheLog
  *
  * @package Moosh\Command\Generic\Dev
@@ -199,7 +199,7 @@ class ApacheParsePerfLog extends MooshCommand {
                     $this->parseCaches($line, 'cachestore_redis');
 
             // Analyze URL.
-            list($row['script'], $row['query'], $row['path'], $row['type']) = $this->analyzeURL($row);
+            list($row['script'], $row['query'], $row['path'], $row['type']) = ApacheParsePerfLog::analyzeURL($row['url']);
 
             // Add host information.
              if($this->expandedOptions['host']) {
@@ -250,51 +250,67 @@ class ApacheParsePerfLog extends MooshCommand {
         return array($hits, $misses, $sets);
     }
 
-    private function analyzeURL($row) {
+    /**
+     * Analyze URL - categorize and extract script name.
+     *
+     * @param $url
+     * @return array|false
+     */
+    public static function analyzeURL($url) {
         $script = '';
         $query = null;
         $path = null;
         $type = 'other';
 
-        if ($row['url'] == '<cron>') {
+        if ($url == '<cron>') {
             // Nothing to analyze here.
             return array($script, $query, $path, 'cli');
         }
 
-        // Split row on first .php
-        $exploded = explode('.php', $row['url']);
+        // Get path and query parts.
+        $urlparsed = parse_url($url);
+
+        if(!$urlparsed) {
+            return false;
+        }
+
+        $urlpath = $urlparsed['path'];
+        if(isset($urlparsed['query'])) {
+            $query = $urlparsed['query'];
+        }
+
+        // Everything until .php will be a script name.
+        // If there is no .php then we append index.php.
+        $exploded = explode('.php', $urlpath);
+
         if (count($exploded) < 2) {
-            $script = rtrim($exploded[0], '?') . 'index.php';
+            $script = rtrim($urlpath,'/') . '/' . 'index.php';
         } else {
             $script = $exploded[0] . '.php';
+            // If there was anything behind .php, then it's a path.
+            if($exploded[1]) {
+                $path = $exploded[1];
+            }
         }
 
         // Determine a type of request.
         if ($script == '/pluginfile.php' || $script == '/webservice/pluginfile.php' || $script == '/file.php' ||
                 $script == '/draftfile.php') {
             $type = 'download';
-        } else if (preg_match('/download=zip$/', $row['url']) || preg_match('/action=downloadall$/', $row['url'])) {
+        } else if (preg_match('/download=zip$/', $url) ||
+                preg_match('/action=downloadall$/', $url) ||
+                preg_match('|^/mod/folder/download_folder.php|', $url) ||
+                preg_match('|^/course/dndupload.php|', $url)
+        ) {
             $type = 'download';
-        } else if (preg_match('/repository_ajax.php\?action=upload/', $row['url'])) {
+        } else if (preg_match('/repository_ajax.php\?action=upload/', $url)) {
             $type = 'upload';
-        } else if (preg_match('|course/view.php|', $row['url'])) {
+        } else if (preg_match('|^/backup/|', $url)) {
+            $type = 'backup';
+        } else if (preg_match('|course/view.php|', $url)) {
             $type = 'course';
         } else {
             $type = 'script';
-        }
-
-        //echo $script . ' ' . $type . "\n";
-
-        unset($exploded[0]);
-        $queryorpath = implode('.php', $exploded);
-        if ($queryorpath) {
-            if ($queryorpath[0] == '/') {
-                $path = $queryorpath;
-            } else if ($queryorpath[0] == '?') {
-                $query = ltrim($queryorpath, '?');
-            } else {
-                cli_problem('Invalid query or path part: ' . $queryorpath);
-            }
         }
 
         return array($script, $query, $path, $type);

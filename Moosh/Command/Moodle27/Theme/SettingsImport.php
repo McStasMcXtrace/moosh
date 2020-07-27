@@ -18,6 +18,8 @@ class SettingsImport extends MooshCommand {
     public function __construct() {
         parent::__construct('settings-import', 'theme');
 
+        $this->addOption('t|targettheme:', 'Destination theme for settings, if different from source');
+
         $this->addArgument('inputfile');
         $this->maxArguments = 2;
     }
@@ -27,23 +29,13 @@ class SettingsImport extends MooshCommand {
 
         require_once "$CFG->libdir/classes/plugin_manager.php";
 
-        if (is_dir($this->arguments[0])) {
-            $this->inputfilepath = $this->arguments[0];
-        } else {
-            $this->inputfilepath =  "{$this->cwd}/{$this->arguments[0]}";
-        }
-
-        if (!is_readable($this->inputfilepath)) {
-            echo "Input file not readable \n";
-            exit(0);
-        }
-
+        $this->inputfilepath = $this->checkFileArg($this->arguments[0]);
         $filename = basename($this->inputfilepath);
-        $outpurdirname = rtrim($filename, '.tar.gz');
-        $this->extractiondir = "{$this->cwd}/{$outpurdirname}/";
+        $outputdirname = rtrim($filename, '.tar.gz');
+        $this->extractiondir = "{$this->cwd}/{$outputdirname}/";
 
         if (!is_writable($this->cwd)) {
-            echo "Directory not writable \n";
+            echo "Directory {$this->cwd} not writable \n";
             exit(0);
         } else {
             try {
@@ -77,6 +69,12 @@ class SettingsImport extends MooshCommand {
 
         $themename = $themedom->getAttribute('name');
         $themecomponent = $themedom->getAttribute('component');
+
+        if (!empty($this->expandedOptions['targettheme'])) {
+            $themename = $this->expandedOptions['targettheme'];
+            $themecomponent = "theme_$themename";
+        }
+
         $settingsdom = $themedom->getElementsByTagName('setting');
 
         $availablethemes = core_plugin_manager::instance()->get_plugins_of_type('theme');

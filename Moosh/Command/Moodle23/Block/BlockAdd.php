@@ -49,6 +49,9 @@ class BlockAdd extends MooshCommand
             $showinsubcontexts = false;
         }
 
+        // Make sure $blocktype is a valid block name.
+        $DB->get_record('block', ['name'=>$blocktype], '*', MUST_EXIST);
+
         switch ($mode) {
             case 'category':
                 $context = context_coursecat::instance($id /* categoryid */, MUST_EXIST);
@@ -61,7 +64,7 @@ class BlockAdd extends MooshCommand
 
             case 'categorycourses':
                 //get all courses in category (recursive)
-                $courselist = get_courses($id /* categoryid */,'','c.id');
+                $courselist = get_courses($id);
                 foreach ($courselist as $course) {
                     $context = context_course::instance($course->id /* courseid */, MUST_EXIST);
                     self::blockAdd($context->id,$blocktype,$pagetypepattern,$region,$weight,$showinsubcontexts);
@@ -95,6 +98,7 @@ class BlockAdd extends MooshCommand
         $blockinstance->defaultregion = $region;
         $blockinstance->defaultweight = $weight;
         $blockinstance->configdata = '';
+        $blockinstance->timecreated = $blockinstance->timemodified = time();
         $blockinstance->id = $DB->insert_record('block_instances', $blockinstance);
 
         // Ensure the block context is created.
